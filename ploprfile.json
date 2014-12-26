@@ -1,0 +1,31 @@
+{
+	//more verbose rsync output, we like it.
+	"verbose" : true,
+
+	//test the files you will sync without actually running
+	//the sync
+	"dry-run" : false,
+
+	//true sync from source to destination
+	//if true, removes files you delete from your local
+	"delete" : true,
+
+	//file formats you want to exclude,
+	//follows rsync format, here is an example for you
+	"excludes" : [
+		".git", "db_backup", "node_modules",
+		"imports", "exports","storage/*/*",
+		"public/min/cache/*", ".subl*",
+		"hooks/vagrant", "img_projects"
+	],
+
+	//list of hosts you want to deploy to
+	"hosts" : [
+		// { 
+		// 	"username" : "ubuntu",
+		// 	"host" : "ip || domain || ~/.ssh/config hostname",
+		// 	"path" : "~/path/on/destination"
+		// }
+	]
+
+}

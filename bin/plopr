@@ -1,0 +1,287 @@
+#!/usr/bin/env php
+
+<?php
+
+$plopr = new Plopr();
+$plopr->run();
+
+
+/**
+* 
+*/
+class Plopr
+{
+
+	/**
+	 * internal error string holder
+	 * holds the string for easier error response
+	 * deep in scope
+	 * @var $_err
+	 */
+	private $_err;
+
+	/**
+	 * testing this again
+	 * @var string
+	 */
+	private static $_config_path = 'ploprfile.json';
+
+	private static $_sync_file = '~plopr';
+
+	/**
+	 * main function
+	 * @return bool true of false if running
+	 */
+	function run()
+	{
+		$config = file_get_contents(static::$_config_path);
+		$this->config =& $config;
+
+		if(!$config){
+			return $this->_error(
+				'Could not find ploprfile in this directory'
+			);
+		}
+
+		$config = json_minify($config);
+		$config = json_decode($config, true);
+
+
+		if(!$config){
+			return $this->_error(
+				'Unable to parse your config file. Should be in strict JSON format (comments OK though).'
+			);
+		}
+
+		$sync = $this->buildSyncCmd();
+
+		if(!$sync){
+			return $this->_error();
+		}
+
+		$sync = "#!/usr/bin/env bash\n\n$sync";
+		$sync .= "\necho '\033[92mPLOPPED!\033[0m'\n";
+
+		$file = static::$_sync_file;
+		file_put_contents($file, $sync);
+		`chmod 755 $file`;
+
+		print("\033[92mplopping...\033[0m\n");
+		passthru( $this->_buildWatchCmd($file) );
+		return true;
+	}
+
+
+	private function _buildWatchCmd($file)
+	{
+		$cmd = 	"fswatch -o \\\n";
+		$cmd .= $this->_excludes();
+		$cmd .= "./ | xargs -n1 ./$file\n";
+		return $cmd;
+	}
+
+	
+	/**
+	 * build out the plopr_sync file
+	 * @return string the entire contents of the script
+	 */
+	private function buildSyncCmd()
+	{
+		$cmd = 'rsync -aP';
+		$cmd .= $this->_flag('verbose', 'v');
+		$cmd .= $this->_flag('dry-run', 'n');
+		$cmd .= $this->_flag('delete', ' --delete');
+
+		$excludes = $this->_excludes();
+		if($excludes){
+			$cmd .= " \\\n$excludes";
+			$cmd .= './';
+		}
+		else{
+			$cmd .= ' ./';
+		}
+
+		return $this->eachHost($cmd);
+	}
+
+	/**
+	 * helper for formatting script flags
+	 * @param  string $key they config key to check for
+	 * @param  string $flag rsync flag value to add
+	 * @return string the rsync flag or empty string
+	 */
+	private function _flag($key = '', $flag)
+	{
+		$on = (bool)array_get($this->config, $key, false);
+		return $on ? $flag : ''; 
+	}
+
+	/**
+	 * build up excludes for rsync
+	 * @return string formatted exlude options
+	 */
+	private function _excludes()
+	{
+
+		$excludes = array_get( $this->config, 'excludes', array() );
+		
+		$excludes[] = static::$_sync_file;
+		$excludes[] = static::$_config_path;
+
+		foreach ($excludes as $ex) {
+			$str .= "--exclude=$ex \\\n";
+		}
+		return $str;
+	}
+
+	/**
+	 * expand the same command for each host
+	 * TODO : consider using rsync batch mode
+	 * @param  string $cmd command {{@see buildSyncCmd}}
+	 * @return string expanded rsync command per server
+	 */
+	private function eachHost($cmd = '')
+	{
+		$hosts = array_get($this->config, 'hosts', array());
+		if(empty($hosts)){
+			$this->_err = 'No hosts set in ploprfile';
+			return false;
+		};
+
+		$sync = '';
+
+		foreach ($hosts as $host) {
+			$host = $this->_validateHost($host);
+			if(!$host){
+				$this->_err = 'Host has invalid format: '.json_encode($host);
+				return false;
+			}
+			extract($host);
+			$sync .= "$cmd $username@$host:$path\n\n";
+		}
+
+		return $sync;
+	}
+
+	/**
+	 * tests for valid host
+	 * @param  Array $host config object for rsync host destination
+	 * @return Mixed false or the valid $host
+	 */
+	private function _validateHost($host)
+	{
+		return (
+			isset($host['username']) && isset($host['host']) && isset($host['path'])
+		) ? $host : false;
+	}
+
+	/**
+	 * return a formatted error
+	 * @param  string $msg 'your error'
+	 * @return string $msg 'formated error'
+	 */
+	private function _error($msg = null)
+	{
+		$msg = $msg 
+			? $msg 
+			: ($this->_err ? $this->_err : 'error');
+
+		$this->_err = null;
+		print("\x07");
+		// print("\n$msg\n");
+		print("\n\033[91m".$msg."\033[0m\n\n");
+		return false;
+	}
+
+}
+
+/**
+ * Get an item from an array using "dot" notation.
+ *
+ * <code>
+ *		// Get the $array['user']['name'] value from the array
+ *		$name = array_get($array, 'user.name');
+ *
+ *		// Return a default from if the specified item doesn't exist
+ *		$name = array_get($array, 'user.name', 'Taylor');
+ * </code>
+ *
+ * @param  array   $array
+ * @param  string  $key
+ * @param  mixed   $default
+ * @return mixed
+ */
+function array_get($array, $key, $default = null)
+{
+	if($key === null) return $array;
+	// if (is_null($key)) return $array;
+
+	// To retrieve the array item using dot syntax, we'll iterate through
+	// each segment in the key and look for that value. If it exists, we
+	// will return it, otherwise we will set the depth of the array and
+	// look for the next segment.
+	foreach (explode('.', $key) as $segment)
+	{
+		if ( ! is_array($array) or ! array_key_exists($segment, $array))
+		{
+			return value($default);
+		}
+
+		$array = $array[$segment];
+	}
+
+	return $array;
+}
+
+/*! JSON.minify()
+	v0.1 (c) Kyle Simpson
+	MIT License
+*/
+function json_minify($json) {
+	$tokenizer = "/\"|(\/\*)|(\*\/)|(\/\/)|\n|\r/";
+	$in_string = false;
+	$in_multiline_comment = false;
+	$in_singleline_comment = false;
+	$tmp; $tmp2; $new_str = array(); $ns = 0; $from = 0; $lc; $rc; $lastIndex = 0;
+		
+	while (preg_match($tokenizer,$json,$tmp,PREG_OFFSET_CAPTURE,$lastIndex)) {
+		$tmp = $tmp[0];
+		$lastIndex = $tmp[1] + strlen($tmp[0]);
+		$lc = substr($json,0,$lastIndex - strlen($tmp[0]));
+		$rc = substr($json,$lastIndex);
+		if (!$in_multiline_comment && !$in_singleline_comment) {
+			$tmp2 = substr($lc,$from);
+			if (!$in_string) {
+				$tmp2 = preg_replace("/(\n|\r|\s)*/","",$tmp2);
+			}
+			$new_str[] = $tmp2;
+		}
+		$from = $lastIndex;
+			
+		if ($tmp[0] == "\"" && !$in_multiline_comment && !$in_singleline_comment) {
+			preg_match("/(\\\\)*$/",$lc,$tmp2);
+			if (!$in_string || !$tmp2 || (strlen($tmp2[0]) % 2) == 0) {	// start of string with ", or unescaped " character found to end string
+				$in_string = !$in_string;
+			}
+			$from--; // include " character in next catch
+			$rc = substr($json,$from);
+		}
+		else if ($tmp[0] == "/*" && !$in_string && !$in_multiline_comment && !$in_singleline_comment) {
+			$in_multiline_comment = true;
+		}
+		else if ($tmp[0] == "*/" && !$in_string && $in_multiline_comment && !$in_singleline_comment) {
+			$in_multiline_comment = false;
+		}
+		else if ($tmp[0] == "//" && !$in_string && !$in_multiline_comment && !$in_singleline_comment) {
+			$in_singleline_comment = true;
+		}
+		else if (($tmp[0] == "\n" || $tmp[0] == "\r") && !$in_string && !$in_multiline_comment && $in_singleline_comment) {
+			$in_singleline_comment = false;
+		}
+		else if (!$in_multiline_comment && !$in_singleline_comment && !(preg_match("/\n|\r|\s/",$tmp[0]))) {
+			$new_str[] = $tmp[0];
+		}
+	}
+	$new_str[] = $rc;
+	return implode("",$new_str);
+}

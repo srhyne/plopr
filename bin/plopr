@@ -58,18 +58,18 @@ class Plopr
 		}
 
 		$sync = "#!/usr/bin/env bash\n\n$sync";
-		$sync .= "\necho '\033[92mPLOPPED!\033[0m'\n";
+		$sync .= "\necho '".green('PLOPPED!', false)."'\n";
 
 		$file = static::$_sync_file;
 		file_put_contents($file, $sync);
 		`chmod 755 $file`;
 
-		print("\033[92mplopping...\033[0m\n");
+		green('plopping...');
 
 		passthru("./$file");
 
 		if( $this->_watch() ){
-			print("\033[92mwatching...\033[0m\n");
+			green('watching...');
 			passthru( $this->_buildWatchCmd($file) );	
 		}
 
@@ -163,8 +163,12 @@ class Plopr
 		$sync = '';
 
 		$from_host = gethostname();
-		echo $from_host;
 		$from_dir = trim(`pwd`);
+
+		$passed_from_host = get_cli_option('from', '');
+		if( $passed_from_host === ':me' ){
+			$passed_from_host = $from_host;
+		}
 
 		foreach ($hosts as $host) {
 
@@ -173,13 +177,19 @@ class Plopr
 			$from = preg_split('/\:/', array_get($host, 'from', ':') );
 
 			$_from_host = array_get($from, '0');
+			if( starts_with($_from_host, '{{') && $passed_from_host ){
+				$_from_host = $passed_from_host;
+			}
+
 			$_from_dir = array_get($from, '1');
 
 			if($_from_host && $_from_host != $from_host){
+				green('skipping from host '. $_from_host);
 				continue;
 			}
 
 			if($_from_dir && $_from_dir != $from_dir){
+				green('skipping from dir '. $_from_host);
 				continue;
 			}
 
@@ -199,6 +209,10 @@ class Plopr
 			else if($p){
 				$sync .= "$cmd $p\n\n";
 			}
+
+			$__from_dir = str_replace( trim(`echo ~/`), '~/', $from_dir);
+			$info = 'rsync '.abridge($__from_dir, 40);
+			green("$info to $u@$h:$p");
 
 		}
 
@@ -292,6 +306,27 @@ function array_get($array, $key, $default = null)
 function starts_with($haystack, $needle)
 {
 	return strpos($haystack, $needle) === 0;
+}
+
+function green( $txt, $print = true )
+{
+	$txt = "\033[92m$txt\033[0m\n";
+	if( $print ){
+		print($txt);
+	}
+	return $txt;
+}
+
+function abridge($text, $maxChars = 40)
+{
+	$textLength = strlen($text);
+	if( $textLength <= $maxChars ){
+		return $text;
+	}
+	return substr_replace(
+		$text, '...', 
+		$maxChars/2, $textLength-$maxChars
+	);
 }
 
 /**

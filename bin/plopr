@@ -1,10 +1,8 @@
 #!/usr/bin/env php
-
 <?php
 
 $plopr = new Plopr();
 $plopr->run();
-
 
 /**
 * 
@@ -67,8 +65,20 @@ class Plopr
 		`chmod 755 $file`;
 
 		print("\033[92mplopping...\033[0m\n");
-		passthru( $this->_buildWatchCmd($file) );
+
+		passthru("./$file");
+
+		if( $this->_watch() ){
+			print("\033[92mwatching...\033[0m\n");
+			passthru( $this->_buildWatchCmd($file) );	
+		}
+
 		return true;
+	}
+
+	private function _watch()
+	{
+		return (int)get_cli_option('watch', 1);
 	}
 
 
@@ -102,6 +112,7 @@ class Plopr
 		}
 
 		return $this->eachHost($cmd);
+	
 	}
 
 	/**
@@ -128,6 +139,7 @@ class Plopr
 		$excludes[] = static::$_sync_file;
 		$excludes[] = static::$_config_path;
 
+		$str = '';
 		foreach ($excludes as $ex) {
 			$str .= "--exclude=$ex \\\n";
 		}
@@ -150,14 +162,48 @@ class Plopr
 
 		$sync = '';
 
+		$from_host = gethostname();
+		echo $from_host;
+		$from_dir = trim(`pwd`);
+
 		foreach ($hosts as $host) {
-			$host = $this->_validateHost($host);
-			if(!$host){
+
+			//if the host config has a from designation
+			//then pass if this host doesn't match
+			$from = preg_split('/\:/', array_get($host, 'from', ':') );
+
+			$_from_host = array_get($from, '0');
+			$_from_dir = array_get($from, '1');
+
+			if($_from_host && $_from_host != $from_host){
+				continue;
+			}
+
+			if($_from_dir && $_from_dir != $from_dir){
+				continue;
+			}
+
+			$valid = $this->_validateHost($host);
+			if(!$valid){
 				$this->_err = 'Host has invalid format: '.json_encode($host);
 				return false;
 			}
-			extract($host);
-			$sync .= "$cmd $username@$host:$path\n\n";
+
+			$h = array_get($host, 'host', '');
+			$u = array_get($host, 'username', '');
+			$p = array_get($host, 'path', '');
+			
+			if($h && $u && $p){
+				$sync .= "$cmd $u@$h:$p\n\n";
+			}
+			else if($p){
+				$sync .= "$cmd $p\n\n";
+			}
+
+		}
+
+		if(!$sync){
+			$this->_err = 'Nothing to sync. Perhaps no from hosts match this machine?';
 		}
 
 		return $sync;
@@ -168,11 +214,14 @@ class Plopr
 	 * @param  Array $host config object for rsync host destination
 	 * @return Mixed false or the valid $host
 	 */
-	private function _validateHost($host)
+	private function _validateHost( $host )
 	{
-		return (
-			isset($host['username']) && isset($host['host']) && isset($host['path'])
-		) ? $host : false;
+		//this is just a path declaration
+		if( !isset($host['host']) && isset($host['path']) ){
+			return true;
+		}
+
+		return isset($host['username']) && isset($host['host']) && isset($host['path']);
 	}
 
 	/**
@@ -224,13 +273,45 @@ function array_get($array, $key, $default = null)
 	{
 		if ( ! is_array($array) or ! array_key_exists($segment, $array))
 		{
-			return value($default);
+			return $default;
 		}
 
 		$array = $array[$segment];
 	}
 
 	return $array;
+}
+
+/**
+ * Determine if a given string begins with a given value.
+ *
+ * @param  string  $haystack
+ * @param  string  $needle
+ * @return bool
+ */
+function starts_with($haystack, $needle)
+{
+	return strpos($haystack, $needle) === 0;
+}
+
+/**
+ * Get a CLI option from the argv $_SERVER variable.
+ *
+ * @param  string  $option
+ * @param  mixed   $default
+ * @return string
+ */
+function get_cli_option($option, $default = null){
+	global $argv;
+	foreach ($argv as $argument)
+	{
+		if (starts_with($argument, "--{$option}="))
+		{
+			return substr($argument, strlen($option) + 3);
+		}
+	}
+
+	return $default;
 }
 
 /*! JSON.minify()

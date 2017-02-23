@@ -21,11 +21,27 @@
 
 	//list of hosts you want to deploy to
 	"hosts" : [
-		// { 
-		// 	"username" : "ubuntu",
-		// 	"host" : "ip || domain || ~/.ssh/config hostname",
-		// 	"path" : "~/path/on/destination"
-		// }
+
+		/*{ 
+			"username" : "ubuntu",
+			"host" : "ip || domain || ~/.ssh/config hostname",
+			"path" : "~/path/on/destination",
+			
+			// OPTIONAL : only run syncs that match a host 'from' value
+			"from" : "macbook-pro-name (same as gethostname(); in php)",
+			"from" : 'host:/path'
+		},
+		
+		You can also rsync to a local path! This is useful
+		when doing deploys where you need to build browser and vendor dependencies
+		
+		example of just syncing to a local path
+		{
+			"path" : "~/my/local/path",
+			OPTIONAL again
+			"from" : "server1"
+		}*/
+
 	]
 
 }

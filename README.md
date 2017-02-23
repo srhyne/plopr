@@ -15,6 +15,15 @@ Plopr is a very simple tool. It watches your project for file & folder changes t
 4. call `plopr` from within the desired level in your project
 5. That's it! Your code changes will sync to your hosts!
 
+**Options**
+
+`--watch=0` = Turn off watch and just run plopr 1 time
+
+
+**ploprfile.json**
+
+See the ploprfile example for configuration options..
+
 ### What does this solve? 
 
 Killer multi-server software development. With Plopr, you can write your code on your local machine and instantly have your changes be reflected on 3+ dev hosts. It makes testing distributed architecture a lot easier. 

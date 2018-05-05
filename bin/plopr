@@ -170,6 +170,8 @@ class Plopr
 			$passed_from_host = $from_host;
 		}
 
+		$tag = get_cli_option('tag');
+
 		foreach ($hosts as $host) {
 
 			//if the host config has a from designation
@@ -191,6 +193,14 @@ class Plopr
 			if($_from_dir && $_from_dir != $from_dir){
 				green('skipping from dir '. $_from_host);
 				continue;
+			}
+
+			if( $tag ){
+				$host_tag = array_get($host, 'tag');
+				if( $host_tag != $tag ){
+					green('skipping unmatched tag on '. $_from_host);
+					continue;
+				}
 			}
 
 			$valid = $this->_validateHost($host);
